@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 
@@ -13,6 +14,15 @@ import (
 
 	pb "github.com/isaacwassouf/authentication-service/protobufs"
 )
+
+type User struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
 
 type UserManagementService struct {
 	pb.UnimplementedUserManagerServer
@@ -55,6 +65,38 @@ func (s *UserManagementService) RegisterUser(
 	}
 
 	return &pb.RegisterResponse{Message: "Registered user successfully"}, nil
+}
+
+func (s *UserManagementService) LoginUser(
+	ctx context.Context,
+	in *pb.LoginRequest,
+) (*pb.LoginResponse, error) {
+	// get the user from the database
+	var user User
+	err := sq.Select("*").
+		From("users").
+		Where(sq.Eq{"email": in.Email}).
+		RunWith(s.UserManagementServiceDB.db).
+		QueryRow().
+		Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+		// if the user does not exist return an error
+	if err != nil {
+		return nil, status.Error(codes.NotFound, "user not found")
+	}
+
+	// check if the password is correct
+	if !CheckPasswordHash(in.Password, user.Password) {
+		return nil, status.Error(codes.InvalidArgument, "incorrect password")
+	}
+
+	// generate a JWT token
+	token, err := GenerateToken(user)
+	if err != nil {
+		fmt.Println(err)
+		return nil, status.Error(codes.Internal, "failed to generate token")
+	}
+
+	return &pb.LoginResponse{Message: "Logged in successfully", Token: token}, nil
 }
 
 func main() {
