@@ -1,0 +1,23 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - user-management-netowork
+
+volumes:
+  db-data:
+
+networks:
+  user-management-netowork:
+    external: false
