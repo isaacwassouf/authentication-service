@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
 
@@ -12,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/isaacwassouf/authentication-service/protobufs"
+	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 )
 
 type User struct {
@@ -67,10 +66,10 @@ func (s *UserManagementService) RegisterUser(
 	}
 
 	// create the email verification Token
-	token, err := GenerateEmailVerificationToken(User{Email: in.Email})
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to generate email verification token")
-	}
+	// token, err := GenerateEmailVerificationToken(User{Email: in.Email})
+	// if err != nil {
+	// 	return nil, status.Error(codes.Internal, "failed to generate email verification token")
+	// }
 
 	// TODO: send the email verification token to the user
 
