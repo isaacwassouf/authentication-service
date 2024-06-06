@@ -20,6 +20,7 @@ type User struct {
 	Name      string `json:"name"`
 	Email     string `json:"email"`
 	Password  string `json:"password"`
+	Verified  bool   `json:"verified"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -29,6 +30,7 @@ type UserManagementService struct {
 	UserManagementServiceDB *UserManagementServiceDB
 }
 
+// RegisterUser registers a user
 func (s *UserManagementService) RegisterUser(
 	ctx context.Context,
 	in *pb.RegisterRequest,
@@ -64,9 +66,18 @@ func (s *UserManagementService) RegisterUser(
 		return nil, status.Error(codes.Internal, "failed to insert user into the database")
 	}
 
-	return &pb.RegisterResponse{Message: "Registered user successfully"}, nil
+	// create the email verification Token
+	token, err := GenerateEmailVerificationToken(User{Email: in.Email})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate email verification token")
+	}
+
+	// TODO: send the email verification token to the user
+
+	return &pb.RegisterResponse{Message: "successfully registerd user"}, nil
 }
 
+// LoginUser logs in a user
 func (s *UserManagementService) LoginUser(
 	ctx context.Context,
 	in *pb.LoginRequest,
@@ -78,7 +89,8 @@ func (s *UserManagementService) LoginUser(
 		Where(sq.Eq{"email": in.Email}).
 		RunWith(s.UserManagementServiceDB.db).
 		QueryRow().
-		Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt)
+		Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.Verified, &user.CreatedAt, &user.UpdatedAt)
+
 		// if the user does not exist return an error
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "user not found")
@@ -92,11 +104,34 @@ func (s *UserManagementService) LoginUser(
 	// generate a JWT token
 	token, err := GenerateToken(user)
 	if err != nil {
-		fmt.Println(err)
 		return nil, status.Error(codes.Internal, "failed to generate token")
 	}
 
 	return &pb.LoginResponse{Message: "Logged in successfully", Token: token}, nil
+}
+
+// VerifyUser verifies a user by Email
+func (s *UserManagementService) VerifyEmail(
+	ctx context.Context,
+	in *pb.VerifyEmailRequest,
+) (*pb.VerifyEmailResponse, error) {
+	// verify the token
+	email, err := VerifyEmailToken(in.Token)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid token")
+	}
+
+	// update the user in the database
+	_, err = sq.Update("users").
+		Where(sq.Eq{"email": email}).
+		Set("verified", true).
+		RunWith(s.UserManagementServiceDB.db).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to update user in the database")
+	}
+
+	return &pb.VerifyEmailResponse{Message: "User verified successfully"}, nil
 }
 
 func main() {
