@@ -9,8 +9,10 @@ import (
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	pb_email "github.com/isaacwassouf/authentication-service/protobufs/email_management_service"
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 )
 
@@ -26,7 +28,8 @@ type User struct {
 
 type UserManagementService struct {
 	pb.UnimplementedUserManagerServer
-	UserManagementServiceDB *UserManagementServiceDB
+	userManagementServiceDB *UserManagementServiceDB
+	emailServiceClient      *pb_email.EmailManagerClient
 }
 
 // RegisterUser registers a user
@@ -39,7 +42,7 @@ func (s *UserManagementService) RegisterUser(
 	err := sq.Select("COUNT(*)").
 		From("users").
 		Where(sq.Eq{"email": in.Email}).
-		RunWith(s.UserManagementServiceDB.db).
+		RunWith(s.userManagementServiceDB.db).
 		QueryRow().
 		Scan(&count)
 	if err != nil {
@@ -59,19 +62,27 @@ func (s *UserManagementService) RegisterUser(
 	_, err = sq.Insert("users").
 		Columns("name", "email", "password").
 		Values(in.Name, in.Email, hashedPassword).
-		RunWith(s.UserManagementServiceDB.db).
+		RunWith(s.userManagementServiceDB.db).
 		Exec()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to insert user into the database")
 	}
 
 	// create the email verification Token
-	// token, err := GenerateEmailVerificationToken(User{Email: in.Email})
-	// if err != nil {
-	// 	return nil, status.Error(codes.Internal, "failed to generate email verification token")
-	// }
+	token, err := GenerateEmailVerificationToken(User{Email: in.Email})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate email verification token")
+	}
 
-	// TODO: send the email verification token to the user
+	// send the email verification token to the user
+	_, err = (*s.emailServiceClient).SendEmail(context.Background(), &pb_email.EmailRequest{
+		To:      in.Email,
+		Subject: "Email Verification",
+		Body:    "Please verify your email by clicking the following link: http://localhost:50051/verify_email?token=" + token,
+	})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to send email verification token")
+	}
 
 	return &pb.RegisterResponse{Message: "successfully registerd user"}, nil
 }
@@ -86,7 +97,7 @@ func (s *UserManagementService) LoginUser(
 	err := sq.Select("*").
 		From("users").
 		Where(sq.Eq{"email": in.Email}).
-		RunWith(s.UserManagementServiceDB.db).
+		RunWith(s.userManagementServiceDB.db).
 		QueryRow().
 		Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.Verified, &user.CreatedAt, &user.UpdatedAt)
 
@@ -124,7 +135,7 @@ func (s *UserManagementService) VerifyEmail(
 	_, err = sq.Update("users").
 		Where(sq.Eq{"email": email}).
 		Set("verified", true).
-		RunWith(s.UserManagementServiceDB.db).
+		RunWith(s.userManagementServiceDB.db).
 		Exec()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to update user in the database")
@@ -133,9 +144,28 @@ func (s *UserManagementService) VerifyEmail(
 	return &pb.VerifyEmailResponse{Message: "User verified successfully"}, nil
 }
 
+// start the gRPC email service client
+func newEmailServiceClient() (pb_email.EmailManagerClient, error) {
+	// Create a connection to the email service
+	conn, err := grpc.Dial(
+		"localhost:8080",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return pb_email.NewEmailManagerClient(conn), nil
+}
+
 func main() {
+	// start the email service client
+	emailServiceClient, err := newEmailServiceClient()
+	if err != nil {
+		log.Fatalf("failed to start the email service client: %v", err)
+	}
+
 	// load the environment variables from the .env file
-	err := godotenv.Load()
+	err = godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
@@ -159,7 +189,13 @@ func main() {
 	// Create a gRPC server object
 	s := grpc.NewServer()
 	// Attach the UserManager service to the server
-	pb.RegisterUserManagerServer(s, &UserManagementService{UserManagementServiceDB: db})
+	pb.RegisterUserManagerServer(
+		s,
+		&UserManagementService{
+			userManagementServiceDB: db,
+			emailServiceClient:      &emailServiceClient,
+		},
+	)
 	log.Printf("Server listening at %v", lis.Addr())
 
 	if err := s.Serve(lis); err != nil {
