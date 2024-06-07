@@ -1,3 +1,6 @@
 [submodule "protobufs/users_management_service"]
 	path = protobufs/users_management_service
 	url = git@github.com:isaacwassouf/authentication-service-protobufs.git
+[submodule "protobufs/email_management_service"]
+	path = protobufs/email_management_service
+	url = git@github.com:isaacwassouf/email-service-protobufs.git
