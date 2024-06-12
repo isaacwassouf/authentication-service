@@ -14,18 +14,18 @@ type UserPayload struct {
 	Verified bool   `json:"verified"`
 }
 
-// Claims struct
+// AuthCustomClaims Claims struct
 type AuthCustomClaims struct {
 	User UserPayload `json:"user"`
 	jwt.RegisteredClaims
 }
 
-type EmailCustomClaims struct {
-	Email string `json:"email"`
+type VerifyEmailCustomClaims struct {
+	ID int `json:"id"`
 	jwt.RegisteredClaims
 }
 
-// Function to generate a JWT token
+// GenerateToken Function to generate a JWT token
 func GenerateToken(user User) (string, error) {
 	// Get the JWT secret key from the environment
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -51,8 +51,8 @@ func GenerateEmailVerificationToken(user User) (string, error) {
 	// Get the JWT secret key from the environment
 	jwtSecret := os.Getenv("JWT_SECRET")
 	// Create the claims for the JWT token
-	claims := EmailCustomClaims{
-		Email: user.Email,
+	claims := VerifyEmailCustomClaims{
+		ID: user.ID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
@@ -63,24 +63,24 @@ func GenerateEmailVerificationToken(user User) (string, error) {
 	return token.SignedString([]byte(jwtSecret))
 }
 
-// Verify the email JWT token
-func VerifyEmailToken(tokenString string) (string, error) {
+// VerifyEmailToken Verify the email JWT token
+func VerifyEmailToken(tokenString string) (int, error) {
 	// Get the JWT secret key from the environment
 	jwtSecret := os.Getenv("JWT_SECRET")
 	// Parse the token
 	token, err := jwt.ParseWithClaims(
 		tokenString,
-		&EmailCustomClaims{},
+		&VerifyEmailCustomClaims{},
 		func(token *jwt.Token) (interface{}, error) {
 			return []byte(jwtSecret), nil
 		},
 	)
 	if err != nil {
-		return "", err
+		return -1, err
 	}
-	claims, ok := token.Claims.(*EmailCustomClaims)
+	claims, ok := token.Claims.(*VerifyEmailCustomClaims)
 	if !ok || !token.Valid {
-		return "", err
+		return -1, err
 	}
-	return claims.Email, nil
+	return claims.ID, nil
 }

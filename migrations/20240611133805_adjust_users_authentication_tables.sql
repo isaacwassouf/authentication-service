@@ -1,0 +1,50 @@
+-- +goose Up
+-- +goose StatementBegin
+ALTER TABLE users DROP COLUMN email;
+ALTER TABLE users DROP COLUMN password;
+ALTER TABLE users DROP COLUMN verified;
+
+CREATE TABLE users_email (
+  id SERIAL PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, email),
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE users_password (
+  id SERIAL PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id),
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE users_authentication (
+  id SERIAL PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  auth_provider_id BIGINT UNSIGNED NOT NULL,
+  auth_provider_identifier VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, auth_provider_id),
+  FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  FOREIGN KEY (auth_provider_id) REFERENCES auth_providers (id) ON DELETE CASCADE
+);
+-- +goose StatementEnd
+
+-- +goose Down
+-- +goose StatementBegin
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255) NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT FALSE;
+
+DROP TABLE IF EXISTS users_email CASCADE;
+DROP TABLE IF EXISTS users_password CASCADE;
+DROP TABLE IF EXISTS users_authentication CASCADE;
+-- +goose StatementEnd
