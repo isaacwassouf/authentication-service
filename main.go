@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb_email "github.com/isaacwassouf/authentication-service/protobufs/email_management_service"
+	pbEmail "github.com/isaacwassouf/authentication-service/protobufs/email_management_service"
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 )
 
@@ -23,7 +23,7 @@ type User struct {
 }
 
 // start the gRPC email service client
-func newEmailServiceClient() (pb_email.EmailManagerClient, error) {
+func newEmailServiceClient() (pbEmail.EmailManagerClient, error) {
 	// Create a connection to the email service
 	conn, err := grpc.Dial(
 		"localhost:8080",
@@ -32,7 +32,7 @@ func newEmailServiceClient() (pb_email.EmailManagerClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return pb_email.NewEmailManagerClient(conn), nil
+	return pbEmail.NewEmailManagerClient(conn), nil
 }
 
 func main() {
@@ -48,7 +48,7 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 
-	// create database connetion
+	// create database connection
 	db, err := NewUserManagementServiceDB()
 	if err != nil {
 		log.Fatalf("failed to connect to the database: %v", err)

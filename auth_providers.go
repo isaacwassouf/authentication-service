@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -12,12 +13,12 @@ import (
 	"github.com/matoous/go-nanoid/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 )
 
-// Set the auth provider credentials
+// SetAuthProviderCredentials sets the client_id and client_secret for an external auth provider
 func (s *UserManagementService) SetAuthProviderCredentials(
 	ctx context.Context,
 	in *pb.SetAuthProviderCredentialsRequest,
@@ -53,7 +54,7 @@ func (s *UserManagementService) SetAuthProviderCredentials(
 	return &pb.SetAuthProviderCredentialsResponse{Message: "Credentials set successfully"}, nil
 }
 
-// Set the auth provider credentials
+// EnableAuthProvider enables an external auth provider
 func (s *UserManagementService) EnableAuthProvider(
 	ctx context.Context,
 	in *pb.EnableAuthProviderRequest,
@@ -88,6 +89,7 @@ func (s *UserManagementService) EnableAuthProvider(
 	return &pb.EnableAuthProviderResponse{Message: "Auth provider enabled successfully"}, nil
 }
 
+// DisableAuthProvider disables an external auth provider
 func (s *UserManagementService) DisableAuthProvider(
 	ctx context.Context,
 	in *pb.DisableAuthProviderRequest,
@@ -143,7 +145,7 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 
 	err = query.RunWith(s.userManagementServiceDB.db).QueryRow().Scan(&clientId, &active)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "Auth provider not found")
 		}
 		return nil, status.Error(codes.Internal, "Failed to query the database")
@@ -167,12 +169,12 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 	params.Add("state", state)
 
 	// get the redirect_uri from the environment variables
-	redirect_uri := os.Getenv("API_GATEWAY_GOOGLE_AUTHORIZATION_URL")
+	redirectURI := os.Getenv("API_GATEWAY_GOOGLE_AUTHORIZATION_URL")
 	// if the redirect_uri is not set, use the default value
-	if redirect_uri == "" {
-		redirect_uri = "http://localhost:5173/api/auth/google/callback"
+	if redirectURI == "" {
+		redirectURI = "http://localhost:5173/api/auth/google/callback"
 	}
-	params.Add("redirect_uri", redirect_uri)
+	params.Add("redirect_uri", redirectURI)
 
 	baseURL.RawQuery = params.Encode()
 
