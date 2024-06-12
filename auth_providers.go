@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/isaacwassouf/authentication-service/actions"
+	"github.com/isaacwassouf/authentication-service/consts"
+	"github.com/isaacwassouf/authentication-service/utils"
 	"net/url"
 	"os"
 	"time"
@@ -141,7 +144,7 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 	query := sq.Select("auth_providers_details.client_id", "auth_providers_details.active").
 		From("auth_providers").
 		Join("auth_providers_details ON auth_providers.id = auth_providers_details.auth_provider_id").
-		Where(sq.Eq{"auth_providers.name": "google"})
+		Where(sq.Eq{"auth_providers.name": consts.GOOGLE})
 
 	err = query.RunWith(s.userManagementServiceDB.db).QueryRow().Scan(&clientId, &active)
 	if err != nil {
@@ -179,4 +182,52 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 	baseURL.RawQuery = params.Encode()
 
 	return &pb.GoogleAuthorizationUrlResponse{Url: baseURL.String(), State: state}, nil
+}
+
+func (s *UserManagementService) HandleGoogleLogin(
+	ctx context.Context,
+	in *pb.GoogleLoginRequest,
+) (*pb.GoogleLoginResponse, error) {
+	// check if Google is enabled
+	active, err := utils.CheckAuthProviderIsActive(consts.GOOGLE, s.userManagementServiceDB.db)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to check if Google is enabled")
+	}
+	if !active {
+		return nil, status.Error(codes.PermissionDenied, "Google is not enabled")
+	}
+
+	// get the external auth user by email
+	user, err := utils.GetExternalAuthUserByEmail(consts.GOOGLE, in.Email, s.userManagementServiceDB.db)
+	if err != nil {
+		// the user does not exist, create a new user
+		if errors.Is(err, sql.ErrNoRows) {
+			id, err := actions.CreateGoogleUser(in, s.userManagementServiceDB.db)
+			if err != nil {
+				return nil, err
+			}
+			// get the user from the database from its id
+			user, err = utils.GetExternalAuthUserByID(consts.GOOGLE, id, s.userManagementServiceDB.db)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "Failed to get the user")
+			}
+
+			// generate a JWT token
+			token, err := utils.GenerateToken(user)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "Failed to generate token")
+			}
+
+			return &pb.GoogleLoginResponse{Message: "Logged in successfully", Token: token}, nil
+		}
+		return nil, status.Error(codes.Internal, "Failed to get the user")
+	}
+
+	// generate a JWT token
+	token, err := utils.GenerateToken(user)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to generate token")
+	}
+
+	return &pb.GoogleLoginResponse{Message: "Logged in successfully", Token: token}, nil
 }

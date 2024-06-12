@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	sq "github.com/Masterminds/squirrel"
+	"github.com/isaacwassouf/authentication-service/models"
+	"github.com/isaacwassouf/authentication-service/utils"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -42,7 +44,7 @@ func (s *UserManagementService) RegisterUser(
 		return nil, err
 	}
 	// create the email verification Token
-	token, err := GenerateEmailVerificationToken(User{ID: id})
+	token, err := utils.GenerateEmailVerificationToken(models.User{ID: id})
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to generate email verification token")
 	}
@@ -66,7 +68,7 @@ func (s *UserManagementService) LoginUser(
 	in *pb.LoginRequest,
 ) (*pb.LoginResponse, error) {
 	// get the user from the database
-	var user User
+	var user models.User
 	err := sq.Select("users.id", "users.name", "users_email.email", "users_password.password", "users_email.is_verified").
 		From("users").
 		InnerJoin("users_email ON users.id = users_email.user_id").
@@ -89,7 +91,7 @@ func (s *UserManagementService) LoginUser(
 	}
 
 	// generate a JWT token
-	token, err := GenerateToken(user)
+	token, err := utils.GenerateToken(user)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to generate token")
 	}
@@ -103,7 +105,7 @@ func (s *UserManagementService) VerifyEmail(
 	in *pb.VerifyEmailRequest,
 ) (*pb.VerifyEmailResponse, error) {
 	// verify the token
-	id, err := VerifyEmailToken(in.Token)
+	id, err := utils.VerifyEmailToken(in.Token)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid token")
 	}

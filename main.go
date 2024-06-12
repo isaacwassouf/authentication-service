@@ -12,16 +12,6 @@ import (
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 )
 
-type User struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	Verified  bool   `json:"verified"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-}
-
 // start the gRPC email service client
 func newEmailServiceClient() (pbEmail.EmailManagerClient, error) {
 	// Create a connection to the email service

@@ -1,10 +1,10 @@
-package main
+package utils
 
 import (
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/isaacwassouf/authentication-service/models"
 	"os"
 	"time"
-
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type UserPayload struct {
@@ -12,6 +12,7 @@ type UserPayload struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
 	Verified bool   `json:"verified"`
+	Provider string `json:"provider"`
 }
 
 // AuthCustomClaims Claims struct
@@ -26,17 +27,21 @@ type VerifyEmailCustomClaims struct {
 }
 
 // GenerateToken Function to generate a JWT token
-func GenerateToken(user User) (string, error) {
+func GenerateToken(user models.User) (string, error) {
 	// Get the JWT secret key from the environment
 	jwtSecret := os.Getenv("JWT_SECRET")
+	userPayload := UserPayload{
+		ID:       user.ID,
+		Name:     user.Name,
+		Email:    user.Email,
+		Verified: user.Verified,
+	}
+	if user.Provider != "" {
+		userPayload.Provider = user.Provider
+	}
 	// Create the claims for the JWT token
 	claims := AuthCustomClaims{
-		User: UserPayload{
-			ID:       user.ID,
-			Name:     user.Name,
-			Email:    user.Email,
-			Verified: user.Verified,
-		},
+		User: userPayload,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
@@ -47,7 +52,7 @@ func GenerateToken(user User) (string, error) {
 	return token.SignedString([]byte(jwtSecret))
 }
 
-func GenerateEmailVerificationToken(user User) (string, error) {
+func GenerateEmailVerificationToken(user models.User) (string, error) {
 	// Get the JWT secret key from the environment
 	jwtSecret := os.Getenv("JWT_SECRET")
 	// Create the claims for the JWT token
