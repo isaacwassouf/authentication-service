@@ -5,9 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/isaacwassouf/authentication-service/actions"
-	"github.com/isaacwassouf/authentication-service/consts"
-	"github.com/isaacwassouf/authentication-service/utils"
 	"net/url"
 	"os"
 	"time"
@@ -18,7 +15,10 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/isaacwassouf/authentication-service/actions"
+	"github.com/isaacwassouf/authentication-service/consts"
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
+	"github.com/isaacwassouf/authentication-service/utils"
 )
 
 // SetAuthProviderCredentials sets the client_id and client_secret for an external auth provider
