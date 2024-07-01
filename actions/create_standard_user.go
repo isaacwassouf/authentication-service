@@ -2,10 +2,12 @@ package actions
 
 import (
 	"database/sql"
+
 	sq "github.com/Masterminds/squirrel"
-	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 )
 
 func ValidateStandardUser(in *pb.RegisterRequest, db *sql.DB) error {
@@ -36,8 +38,8 @@ func CreateStandardUser(in *pb.RegisterRequest, hashedPassword string, db *sql.D
 
 	// insert the user in the users table
 	result, err := sq.Insert("users").
-		Columns("name").
-		Values(in.Name).
+		Columns("name", "is_admin").
+		Values(in.Name, false).
 		RunWith(tx).
 		Exec()
 	if err != nil {

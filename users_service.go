@@ -4,15 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
 	sq "github.com/Masterminds/squirrel"
-	"github.com/isaacwassouf/authentication-service/models"
-	"github.com/isaacwassouf/authentication-service/utils"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/isaacwassouf/authentication-service/actions"
+	"github.com/isaacwassouf/authentication-service/models"
 	pbEmail "github.com/isaacwassouf/authentication-service/protobufs/email_management_service"
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
+	"github.com/isaacwassouf/authentication-service/utils"
 )
 
 type UserManagementService struct {
@@ -77,7 +78,7 @@ func (s *UserManagementService) LoginUser(
 		RunWith(s.userManagementServiceDB.db).
 		QueryRow().
 		Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.Verified)
-	// if the user does not exist return an error
+		// if the user does not exist return an error
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "user not found")
