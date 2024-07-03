@@ -21,6 +21,35 @@ import (
 	"github.com/isaacwassouf/authentication-service/utils"
 )
 
+func (s *UserManagementService) ListAuthProviders(ctx context.Context, in *emptypb.Empty) (*pb.ListAuthProvidersResponse, error) {
+	// get the list of auth providers
+	rows, err := sq.Select(
+		"auth_providers.id",
+		"auth_providers.name",
+		"auth_providers_details.client_id",
+		"auth_providers_details.active",
+	).
+		From("auth_providers").
+		Join("auth_providers_details ON auth_providers.id = auth_providers_details.auth_provider_id").
+		RunWith(s.userManagementServiceDB.db).
+		Query()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to query the database")
+	}
+
+	var authProviders []*pb.AuthProvider
+	for rows.Next() {
+		var authProvider pb.AuthProvider
+		err := rows.Scan(&authProvider.Id, &authProvider.Name, &authProvider.ClientId, &authProvider.Active)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "Failed to scan the rows")
+		}
+		authProviders = append(authProviders, &authProvider)
+	}
+
+	return &pb.ListAuthProvidersResponse{AuthProviders: authProviders}, nil
+}
+
 // SetAuthProviderCredentials sets the client_id and client_secret for an external auth provider
 func (s *UserManagementService) SetAuthProviderCredentials(
 	ctx context.Context,
@@ -125,7 +154,7 @@ func (s *UserManagementService) DisableAuthProvider(
 		return nil, status.Error(codes.Internal, "Failed to enable the auth provider")
 	}
 
-	return &pb.DisableAuthProviderResponse{Message: "Auth provider enabled successfully"}, nil
+	return &pb.DisableAuthProviderResponse{Message: "Auth provider disabled successfully"}, nil
 }
 
 func (s *UserManagementService) GetGoogleAuthorizationUrl(
