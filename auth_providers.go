@@ -39,11 +39,22 @@ func (s *UserManagementService) ListAuthProviders(ctx context.Context, in *empty
 
 	var authProviders []*pb.AuthProvider
 	for rows.Next() {
-		var authProvider pb.AuthProvider
-		err := rows.Scan(&authProvider.Id, &authProvider.Name, &authProvider.ClientId, &authProvider.Active)
+		var id uint64
+		var name string
+		var clientId sql.NullString
+		var active bool
+		err := rows.Scan(&id, &name, &clientId, &active)
 		if err != nil {
-			return nil, status.Error(codes.Internal, "Failed to scan the rows")
+			return nil, status.Error(codes.Internal, err.Error())
 		}
+
+		authProvider := pb.AuthProvider{
+			Id:       id,
+			Name:     name,
+			ClientId: clientId.String,
+			Active:   active,
+		}
+
 		authProviders = append(authProviders, &authProvider)
 	}
 
