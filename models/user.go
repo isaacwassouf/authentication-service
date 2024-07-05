@@ -10,3 +10,9 @@ type User struct {
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
+
+type Admin struct {
+	ID       int    `json:"id"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}

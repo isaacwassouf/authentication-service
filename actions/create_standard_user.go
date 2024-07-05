@@ -38,8 +38,8 @@ func CreateStandardUser(in *pb.RegisterRequest, hashedPassword string, db *sql.D
 
 	// insert the user in the users table
 	result, err := sq.Insert("users").
-		Columns("name", "is_admin").
-		Values(in.Name, false).
+		Columns("name").
+		Values(in.Name).
 		RunWith(tx).
 		Exec()
 	if err != nil {
