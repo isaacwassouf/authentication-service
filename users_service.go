@@ -8,6 +8,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/isaacwassouf/authentication-service/actions"
 	"github.com/isaacwassouf/authentication-service/models"
@@ -182,4 +183,59 @@ func (s *UserManagementService) LoginAdmin(ctx context.Context, in *pb.LoginRequ
 	}
 
 	return &pb.LoginResponse{Message: "Logged in successfully", Token: token}, nil
+}
+
+func (s *UserManagementService) ListUsers(empty *emptypb.Empty, stream pb.UserManager_ListUsersServer) error {
+	rows, err := sq.Select(
+		"users.id",
+		"users.name",
+		"users_email.email",
+		"users_email.is_verified",
+		"auth_providers.name as auth_provider_name",
+		"users.created_at",
+		"users.updated_at",
+	).
+		From("users").
+		InnerJoin("users_email ON users.id = users_email.user_id").
+		LeftJoin("users_authentication on users.id = users_authentication.user_id").
+		LeftJoin("auth_providers on users_authentication.auth_provider_id = auth_providers.id").
+		RunWith(s.userManagementServiceDB.db).
+		Query()
+	if err != nil {
+		return status.Error(codes.Internal, "failed to query the database")
+	}
+
+	for rows.Next() {
+		var id uint64
+		var name, email, createdAt, updatedAt string
+		var verified bool
+		var authProvider sql.NullString
+		err := rows.Scan(
+			&id,
+			&name,
+			&email,
+			&verified,
+			&authProvider,
+			&createdAt,
+			&updatedAt,
+		)
+		if err != nil {
+			return status.Error(codes.Internal, "failed to scan the database")
+		}
+
+		err = stream.Send(&pb.User{
+			Id:           id,
+			Name:         name,
+			Email:        email,
+			IsVerified:   verified,
+			AuthProvider: authProvider.String,
+			CreatedAt:    createdAt,
+			UpdatedAt:    updatedAt,
+		})
+		if err != nil {
+			return status.Error(codes.Internal, "failed to send the response")
+		}
+	}
+
+	return nil
 }
