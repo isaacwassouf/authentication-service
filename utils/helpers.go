@@ -2,7 +2,9 @@ package utils
 
 import (
 	"database/sql"
+
 	sq "github.com/Masterminds/squirrel"
+
 	"github.com/isaacwassouf/authentication-service/models"
 )
 
@@ -55,4 +57,18 @@ func GetExternalAuthUserByID(provider string, id int, db *sql.DB) (models.User, 
 		return user, err
 	}
 	return user, nil
+}
+
+func GetAuthProviderClientID(provider string, db *sql.DB) (sql.NullString, error) {
+	var clientID sql.NullString
+	query := sq.Select("auth_providers_details.client_id").
+		From("auth_providers").
+		Join("auth_providers_details ON auth_providers.id = auth_providers_details.auth_provider_id").
+		Where(sq.Eq{"auth_providers.name": provider})
+
+	err := query.RunWith(db).QueryRow().Scan(&clientID)
+	if err != nil {
+		return sql.NullString{}, err
+	}
+	return clientID, nil
 }

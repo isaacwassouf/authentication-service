@@ -61,6 +61,44 @@ func (s *UserManagementService) ListAuthProviders(ctx context.Context, in *empty
 	return &pb.ListAuthProvidersResponse{AuthProviders: authProviders}, nil
 }
 
+func (s *UserManagementService) GetAuthProviderCredentials(ctx context.Context, in *pb.GetAuthProviderCredentialsRequest) (*pb.GetAuthProviderCredentialsResponse, error) {
+	// check if auth provider is enabled
+
+	var authProviderName string
+
+	switch in.AuthProvider {
+	case pb.AuthProviderName_GOOGLE:
+		authProviderName = consts.GOOGLE
+	case pb.AuthProviderName_GITHUB:
+		authProviderName = consts.GitHub
+	default:
+		return nil, status.Error(codes.InvalidArgument, "Invalid auth provider")
+	}
+
+	active, err := utils.CheckAuthProviderIsActive(authProviderName, s.userManagementServiceDB.db)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to check if GitHub is enabled")
+	}
+
+	if !active {
+		return nil, status.Error(codes.PermissionDenied, "Auth provider is not enabled")
+	}
+
+	// get the client_id and client_secret for the auth provider
+	var clientId sql.NullString
+	var clientSecret sql.NullString
+
+	err = sq.Select("client_id", "client_secret").
+		From("auth_providers_details").
+		Join("auth_providers ON auth_providers.id = auth_providers_details.auth_provider_id").
+		Where(sq.Eq{"auth_providers.name": authProviderName}).RunWith(s.userManagementServiceDB.db).Scan(&clientId, &clientSecret)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to get the credentials")
+	}
+
+	return &pb.GetAuthProviderCredentialsResponse{ClientId: clientId.String, ClientSecret: clientSecret.String}, nil
+}
+
 // SetAuthProviderCredentials sets the client_id and client_secret for an external auth provider
 func (s *UserManagementService) SetAuthProviderCredentials(
 	ctx context.Context,
@@ -270,4 +308,78 @@ func (s *UserManagementService) HandleGoogleLogin(
 	}
 
 	return &pb.GoogleLoginResponse{Message: "Logged in successfully", Token: token}, nil
+}
+
+func (s *UserManagementService) GetGitHubAuthorizationUrl(
+	ctx context.Context, in *emptypb.Empty,
+) (*pb.GitHubAuthorizationUrlResponse, error) {
+	// set the base url for the github authorization url
+	baseURL, err := url.ParseRequestURI("https://github.com/login/oauth/authorize")
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to parse the base url")
+	}
+
+	clientID, err := utils.GetAuthProviderClientID(consts.GitHub, s.userManagementServiceDB.db)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if !clientID.Valid {
+		return nil, status.Error(codes.Internal, "Client ID is not set")
+	}
+
+	params := url.Values{}
+	params.Add("client_id", clientID.String)
+	params.Add("scope", "read:user user:email")
+	params.Add("state", "random_state")
+	params.Add("redirect_uri", "http://localhost:4000/api/auth/github/callback")
+
+	baseURL.RawQuery = params.Encode()
+
+	return &pb.GitHubAuthorizationUrlResponse{Url: baseURL.String()}, nil
+}
+
+func (s *UserManagementService) HandleGitHubLogin(ctx context.Context, in *pb.GitHubLoginRequest) (*pb.GitHubLoginResponse, error) {
+	// check if GitHub is enabled
+	active, err := utils.CheckAuthProviderIsActive(consts.GitHub, s.userManagementServiceDB.db)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to check if GitHub is enabled")
+	}
+	if !active {
+		return nil, status.Error(codes.PermissionDenied, "GitHub is not enabled")
+	}
+
+	// get the external auth user by email
+	user, err := utils.GetExternalAuthUserByEmail(consts.GitHub, in.Email, s.userManagementServiceDB.db)
+	if err != nil {
+		// the user does not exist, create a new user
+		if errors.Is(err, sql.ErrNoRows) {
+			id, err := actions.CreateGitHubUser(in, s.userManagementServiceDB.db)
+			if err != nil {
+				return nil, err
+			}
+			// get the user from the database from its id
+			user, err = utils.GetExternalAuthUserByID(consts.GitHub, id, s.userManagementServiceDB.db)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "Failed to get the user")
+			}
+
+			// generate a JWT token
+			token, err := utils.GenerateToken(user)
+			if err != nil {
+				return nil, status.Error(codes.Internal, "Failed to generate token")
+			}
+
+			return &pb.GitHubLoginResponse{Message: "Logged in successfully", Token: token}, nil
+		}
+		return nil, status.Error(codes.Internal, "Failed to get the user")
+	}
+
+	// generate a JWT token
+	token, err := utils.GenerateToken(user)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to generate token")
+	}
+
+	return &pb.GitHubLoginResponse{Message: "Logged in successfully", Token: token}, nil
 }

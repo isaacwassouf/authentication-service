@@ -1,3 +1,5 @@
 .env
 makefile
 .idea
+.air.toml
+/tmp/
