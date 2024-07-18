@@ -52,10 +52,9 @@ func (s *UserManagementService) RegisterUser(
 	}
 
 	// send the email verification token to the user
-	_, err = (*s.emailServiceClient).SendEmail(context.Background(), &pbEmail.EmailRequest{
-		To:      in.Email,
-		Subject: "Email Verification",
-		Body:    "Please verify your email by clicking the following link: http://localhost:50051/verify_email?token=" + token,
+	_, err = (*s.emailServiceClient).SendVerifyEmailEmail(context.Background(), &pbEmail.SendEmailRequest{
+		To:    in.Email,
+		Token: token,
 	})
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to send email verification token")
