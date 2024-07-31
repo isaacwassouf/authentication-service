@@ -3,3 +3,4 @@ makefile
 .idea
 .air.toml
 /tmp/
+/docker/

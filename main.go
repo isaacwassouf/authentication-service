@@ -4,38 +4,23 @@ import (
 	"log"
 	"net"
 
-	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
-	pbEmail "github.com/isaacwassouf/authentication-service/protobufs/email_management_service"
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
+	"github.com/isaacwassouf/authentication-service/utils"
 )
 
-// start the gRPC email service client
-func newEmailServiceClient() (pbEmail.EmailManagerClient, error) {
-	// Create a connection to the email service
-	conn, err := grpc.Dial(
-		"localhost:8080",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return pbEmail.NewEmailManagerClient(conn), nil
-}
-
 func main() {
-	// start the email service client
-	emailServiceClient, err := newEmailServiceClient()
-	if err != nil {
-		log.Fatalf("failed to start the email service client: %v", err)
-	}
-
 	// load the environment variables from the .env file
-	err = godotenv.Load()
+	err := utils.LoadEnvVarsFromFile()
 	if err != nil {
 		log.Fatalf("Error loading .env file")
+	}
+
+	// start the email service client
+	emailServiceClient, err := utils.NewEmailServiceClient()
+	if err != nil {
+		log.Fatalf("failed to start the email service client: %v", err)
 	}
 
 	// create database connection
