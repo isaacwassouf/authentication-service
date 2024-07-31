@@ -35,7 +35,7 @@ func (s *UserManagementService) RegisterUser(
 	}
 
 	// hash the password
-	hashedPassword, err := HashPassword(in.Password)
+	hashedPassword, err := utils.HashPassword(in.Password)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to hash the password")
 	}
@@ -50,7 +50,6 @@ func (s *UserManagementService) RegisterUser(
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to generate email verification token")
 	}
-
 	// send the email verification token to the user
 	_, err = (*s.emailServiceClient).SendVerifyEmailEmail(context.Background(), &pbEmail.SendEmailRequest{
 		To:    in.Email,
@@ -87,7 +86,7 @@ func (s *UserManagementService) LoginUser(
 	}
 
 	// check if the password is correct
-	if !CheckPasswordHash(in.Password, user.Password) {
+	if !utils.CheckPasswordHash(in.Password, user.Password) {
 		return nil, status.Error(codes.InvalidArgument, "incorrect password")
 	}
 
@@ -140,7 +139,7 @@ func (s *UserManagementService) RegisterAdmin(ctx context.Context, in *pb.Regist
 		return nil, status.Error(codes.AlreadyExists, "admin already exists")
 	}
 
-	hashedPassword, err := HashPassword(in.Password)
+	hashedPassword, err := utils.HashPassword(in.Password)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to hash the password")
 	}
@@ -172,7 +171,7 @@ func (s *UserManagementService) LoginAdmin(ctx context.Context, in *pb.LoginRequ
 		return nil, status.Error(codes.Internal, "failed to query the database")
 	}
 
-	if !CheckPasswordHash(in.Password, admin.Password) {
+	if !utils.CheckPasswordHash(in.Password, admin.Password) {
 		return nil, status.Error(codes.InvalidArgument, "incorrect password")
 	}
 
