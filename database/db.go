@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"database/sql"
@@ -9,7 +9,7 @@ import (
 )
 
 type UserManagementServiceDB struct {
-	db *sql.DB
+	DB *sql.DB
 }
 
 func NewUserManagementServiceDB() (*UserManagementServiceDB, error) {
@@ -27,5 +27,5 @@ func NewUserManagementServiceDB() (*UserManagementServiceDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &UserManagementServiceDB{db: db}, nil
+	return &UserManagementServiceDB{DB: db}, nil
 }

@@ -6,6 +6,8 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/isaacwassouf/authentication-service/database"
+	"github.com/isaacwassouf/authentication-service/modules"
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 	"github.com/isaacwassouf/authentication-service/utils"
 )
@@ -24,13 +26,13 @@ func main() {
 	}
 
 	// create database connection
-	db, err := NewUserManagementServiceDB()
+	db, err := database.NewUserManagementServiceDB()
 	if err != nil {
 		log.Fatalf("failed to connect to the database: %v", err)
 	}
-	defer db.db.Close()
+	defer db.DB.Close()
 	// ping the database to check the connection
-	if err := db.db.Ping(); err != nil {
+	if err := db.DB.Ping(); err != nil {
 		log.Fatalf("failed to ping the database: %v", err)
 	}
 
@@ -44,9 +46,9 @@ func main() {
 	// Attach the UserManager service to the server
 	pb.RegisterUserManagerServer(
 		s,
-		&UserManagementService{
-			userManagementServiceDB: db,
-			emailServiceClient:      &emailServiceClient,
+		&modules.UserManagementService{
+			UserManagementServiceDB: db,
+			EmailServiceClient:      &emailServiceClient,
 		},
 	)
 	log.Printf("Server listening at %v", lis.Addr())

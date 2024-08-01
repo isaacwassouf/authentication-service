@@ -1,4 +1,4 @@
-package main
+package modules
 
 import (
 	"context"
@@ -17,19 +17,13 @@ import (
 	"github.com/isaacwassouf/authentication-service/utils"
 )
 
-type UserManagementService struct {
-	pb.UnimplementedUserManagerServer
-	userManagementServiceDB *UserManagementServiceDB
-	emailServiceClient      *pbEmail.EmailManagerClient
-}
-
 // RegisterUser registers a user
 func (s *UserManagementService) RegisterUser(
 	ctx context.Context,
 	in *pb.RegisterRequest,
 ) (*pb.RegisterResponse, error) {
 	// check if the email is already registered
-	err := actions.ValidateStandardUser(in, s.userManagementServiceDB.db)
+	err := actions.ValidateStandardUser(in, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +35,7 @@ func (s *UserManagementService) RegisterUser(
 	}
 
 	// insert the user in the users table and the users_email and users_password table in a transaction
-	id, err := actions.CreateStandardUser(in, hashedPassword, s.userManagementServiceDB.db)
+	id, err := actions.CreateStandardUser(in, hashedPassword, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +45,7 @@ func (s *UserManagementService) RegisterUser(
 		return nil, status.Error(codes.Internal, "failed to generate email verification token")
 	}
 	// send the email verification token to the user
-	_, err = (*s.emailServiceClient).SendVerifyEmailEmail(context.Background(), &pbEmail.SendEmailRequest{
+	_, err = (*s.EmailServiceClient).SendVerifyEmailEmail(context.Background(), &pbEmail.SendEmailRequest{
 		To:    in.Email,
 		Token: token,
 	})
@@ -74,7 +68,7 @@ func (s *UserManagementService) LoginUser(
 		InnerJoin("users_email ON users.id = users_email.user_id").
 		InnerJoin("users_password ON users.id = users_password.user_id").
 		Where(sq.Eq{"email": in.Email}).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
 		Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.Verified)
 		// if the user does not exist return an error
@@ -114,7 +108,7 @@ func (s *UserManagementService) VerifyEmail(
 	_, err = sq.Update("users_email").
 		Where(sq.Eq{"user_id": id}).
 		Set("is_verified", true).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		Exec()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to update user in the database")
@@ -128,7 +122,7 @@ func (s *UserManagementService) RegisterAdmin(ctx context.Context, in *pb.Regist
 	err := sq.Select("count(*)").
 		From("admins").
 		Where(sq.Eq{"email": in.Email}).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
 		Scan(&count)
 	if err != nil {
@@ -147,7 +141,7 @@ func (s *UserManagementService) RegisterAdmin(ctx context.Context, in *pb.Regist
 	_, err = sq.Insert("admins").
 		Columns("email", "password").
 		Values(in.Email, hashedPassword).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		Exec()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to insert admin in the database")
@@ -161,7 +155,7 @@ func (s *UserManagementService) LoginAdmin(ctx context.Context, in *pb.LoginRequ
 	err := sq.Select("id", "email", "password").
 		From("admins").
 		Where(sq.Eq{"email": in.Email}).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
 		Scan(&admin.ID, &admin.Email, &admin.Password)
 	if err != nil {
@@ -197,7 +191,7 @@ func (s *UserManagementService) ListUsers(empty *emptypb.Empty, stream pb.UserMa
 		InnerJoin("users_email ON users.id = users_email.user_id").
 		LeftJoin("users_authentication on users.id = users_authentication.user_id").
 		LeftJoin("auth_providers on users_authentication.auth_provider_id = auth_providers.id").
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		Query()
 	if err != nil {
 		return status.Error(codes.Internal, "failed to query the database")

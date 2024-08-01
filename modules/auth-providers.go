@@ -1,4 +1,4 @@
-package main
+package modules
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func (s *UserManagementService) ListAuthProviders(ctx context.Context, in *empty
 	).
 		From("auth_providers").
 		Join("auth_providers_details ON auth_providers.id = auth_providers_details.auth_provider_id").
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		Query()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to query the database")
@@ -75,7 +75,7 @@ func (s *UserManagementService) GetAuthProviderCredentials(ctx context.Context, 
 		return nil, status.Error(codes.InvalidArgument, "Invalid auth provider")
 	}
 
-	active, err := utils.CheckAuthProviderIsActive(authProviderName, s.userManagementServiceDB.db)
+	active, err := utils.CheckAuthProviderIsActive(authProviderName, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to check if GitHub is enabled")
 	}
@@ -91,7 +91,7 @@ func (s *UserManagementService) GetAuthProviderCredentials(ctx context.Context, 
 	err = sq.Select("client_id", "client_secret").
 		From("auth_providers_details").
 		Join("auth_providers ON auth_providers.id = auth_providers_details.auth_provider_id").
-		Where(sq.Eq{"auth_providers.name": authProviderName}).RunWith(s.userManagementServiceDB.db).Scan(&clientId, &clientSecret)
+		Where(sq.Eq{"auth_providers.name": authProviderName}).RunWith(s.UserManagementServiceDB.DB).Scan(&clientId, &clientSecret)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to get the credentials")
 	}
@@ -109,7 +109,7 @@ func (s *UserManagementService) SetAuthProviderCredentials(
 	err := sq.Select("COUNT(*)").
 		From("auth_providers").
 		Where(sq.Eq{"id": in.AuthProviderId}).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
 		Scan(&count)
 	if err != nil {
@@ -126,7 +126,7 @@ func (s *UserManagementService) SetAuthProviderCredentials(
 		Set("client_id", in.ClientId).
 		Set("client_secret", in.ClientSecret).
 		Set("updated_at", time.Now()).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		Exec()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to set the credentials")
@@ -145,7 +145,7 @@ func (s *UserManagementService) EnableAuthProvider(
 	err := sq.Select("COUNT(*)").
 		From("auth_providers").
 		Where(sq.Eq{"id": in.AuthProviderId}).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
 		Scan(&count)
 	if err != nil {
@@ -161,7 +161,7 @@ func (s *UserManagementService) EnableAuthProvider(
 		Where(sq.Eq{"auth_provider_id": in.AuthProviderId}).
 		Set("active", true).
 		Set("updated_at", time.Now()).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		Exec()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to enable the auth provider")
@@ -180,7 +180,7 @@ func (s *UserManagementService) DisableAuthProvider(
 	err := sq.Select("COUNT(*)").
 		From("auth_providers").
 		Where(sq.Eq{"id": in.AuthProviderId}).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
 		Scan(&count)
 	if err != nil {
@@ -196,7 +196,7 @@ func (s *UserManagementService) DisableAuthProvider(
 		Where(sq.Eq{"auth_provider_id": in.AuthProviderId}).
 		Set("active", false).
 		Set("updated_at", time.Now()).
-		RunWith(s.userManagementServiceDB.db).
+		RunWith(s.UserManagementServiceDB.DB).
 		Exec()
 	if err != nil {
 		fmt.Println(err)
@@ -224,7 +224,7 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 		Join("auth_providers_details ON auth_providers.id = auth_providers_details.auth_provider_id").
 		Where(sq.Eq{"auth_providers.name": consts.GOOGLE})
 
-	err = query.RunWith(s.userManagementServiceDB.db).QueryRow().Scan(&clientId, &active)
+	err = query.RunWith(s.UserManagementServiceDB.DB).QueryRow().Scan(&clientId, &active)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "Auth provider not found")
@@ -267,7 +267,7 @@ func (s *UserManagementService) HandleGoogleLogin(
 	in *pb.GoogleLoginRequest,
 ) (*pb.GoogleLoginResponse, error) {
 	// check if Google is enabled
-	active, err := utils.CheckAuthProviderIsActive(consts.GOOGLE, s.userManagementServiceDB.db)
+	active, err := utils.CheckAuthProviderIsActive(consts.GOOGLE, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to check if Google is enabled")
 	}
@@ -276,16 +276,16 @@ func (s *UserManagementService) HandleGoogleLogin(
 	}
 
 	// get the external auth user by email
-	user, err := utils.GetExternalAuthUserByEmail(consts.GOOGLE, in.Email, s.userManagementServiceDB.db)
+	user, err := utils.GetExternalAuthUserByEmail(consts.GOOGLE, in.Email, s.UserManagementServiceDB.DB)
 	if err != nil {
 		// the user does not exist, create a new user
 		if errors.Is(err, sql.ErrNoRows) {
-			id, err := actions.CreateGoogleUser(in, s.userManagementServiceDB.db)
+			id, err := actions.CreateGoogleUser(in, s.UserManagementServiceDB.DB)
 			if err != nil {
 				return nil, err
 			}
 			// get the user from the database from its id
-			user, err = utils.GetExternalAuthUserByID(consts.GOOGLE, id, s.userManagementServiceDB.db)
+			user, err = utils.GetExternalAuthUserByID(consts.GOOGLE, id, s.UserManagementServiceDB.DB)
 			if err != nil {
 				return nil, status.Error(codes.Internal, "Failed to get the user")
 			}
@@ -319,7 +319,7 @@ func (s *UserManagementService) GetGitHubAuthorizationUrl(
 		return nil, status.Error(codes.Internal, "Failed to parse the base url")
 	}
 
-	clientID, err := utils.GetAuthProviderClientID(consts.GitHub, s.userManagementServiceDB.db)
+	clientID, err := utils.GetAuthProviderClientID(consts.GitHub, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -341,7 +341,7 @@ func (s *UserManagementService) GetGitHubAuthorizationUrl(
 
 func (s *UserManagementService) HandleGitHubLogin(ctx context.Context, in *pb.GitHubLoginRequest) (*pb.GitHubLoginResponse, error) {
 	// check if GitHub is enabled
-	active, err := utils.CheckAuthProviderIsActive(consts.GitHub, s.userManagementServiceDB.db)
+	active, err := utils.CheckAuthProviderIsActive(consts.GitHub, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to check if GitHub is enabled")
 	}
@@ -350,16 +350,16 @@ func (s *UserManagementService) HandleGitHubLogin(ctx context.Context, in *pb.Gi
 	}
 
 	// get the external auth user by email
-	user, err := utils.GetExternalAuthUserByEmail(consts.GitHub, in.Email, s.userManagementServiceDB.db)
+	user, err := utils.GetExternalAuthUserByEmail(consts.GitHub, in.Email, s.UserManagementServiceDB.DB)
 	if err != nil {
 		// the user does not exist, create a new user
 		if errors.Is(err, sql.ErrNoRows) {
-			id, err := actions.CreateGitHubUser(in, s.userManagementServiceDB.db)
+			id, err := actions.CreateGitHubUser(in, s.UserManagementServiceDB.DB)
 			if err != nil {
 				return nil, err
 			}
 			// get the user from the database from its id
-			user, err = utils.GetExternalAuthUserByID(consts.GitHub, id, s.userManagementServiceDB.db)
+			user, err = utils.GetExternalAuthUserByID(consts.GitHub, id, s.UserManagementServiceDB.DB)
 			if err != nil {
 				return nil, status.Error(codes.Internal, "Failed to get the user")
 			}
