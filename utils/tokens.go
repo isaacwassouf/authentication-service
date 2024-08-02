@@ -98,25 +98,3 @@ func GenerateEmailVerificationToken(user models.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(jwtSecret))
 }
-
-// VerifyEmailToken Verify the email JWT token
-func VerifyEmailToken(tokenString string) (int, error) {
-	// Get the JWT secret key from the environment
-	jwtSecret := os.Getenv("JWT_SECRET")
-	// Parse the token
-	token, err := jwt.ParseWithClaims(
-		tokenString,
-		&VerifyEmailCustomClaims{},
-		func(token *jwt.Token) (interface{}, error) {
-			return []byte(jwtSecret), nil
-		},
-	)
-	if err != nil {
-		return -1, err
-	}
-	claims, ok := token.Claims.(*VerifyEmailCustomClaims)
-	if !ok || !token.Valid {
-		return -1, err
-	}
-	return claims.ID, nil
-}

@@ -6,6 +6,7 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/joho/godotenv"
+	"github.com/matoous/go-nanoid/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -123,4 +124,8 @@ func GetAuthProviderClientID(provider string, db *sql.DB) (sql.NullString, error
 		return sql.NullString{}, err
 	}
 	return clientID, nil
+}
+
+func GenerateEmailVerificationCode() (string, error) {
+	return gonanoid.New()
 }

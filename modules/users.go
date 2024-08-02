@@ -93,30 +93,6 @@ func (s *UserManagementService) LoginUser(
 	return &pb.LoginResponse{Message: "Logged in successfully", Token: token}, nil
 }
 
-// VerifyEmail verifies a user by Email
-func (s *UserManagementService) VerifyEmail(
-	ctx context.Context,
-	in *pb.VerifyEmailRequest,
-) (*pb.VerifyEmailResponse, error) {
-	// verify the token
-	id, err := utils.VerifyEmailToken(in.Token)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid token")
-	}
-
-	// update the user in the database
-	_, err = sq.Update("users_email").
-		Where(sq.Eq{"user_id": id}).
-		Set("is_verified", true).
-		RunWith(s.UserManagementServiceDB.DB).
-		Exec()
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to update user in the database")
-	}
-
-	return &pb.VerifyEmailResponse{Message: "User verified successfully"}, nil
-}
-
 func (s *UserManagementService) ListUsers(empty *emptypb.Empty, stream pb.UserManager_ListUsersServer) error {
 	rows, err := sq.Select(
 		"users.id",
@@ -168,7 +144,6 @@ func (s *UserManagementService) ListUsers(empty *emptypb.Empty, stream pb.UserMa
 			return status.Error(codes.Internal, "failed to send the response")
 		}
 	}
-
 	return nil
 }
 
@@ -286,4 +261,107 @@ func (s *UserManagementService) ConfirmPasswordReset(ctx context.Context, in *pb
 	}
 
 	return &pb.ConfirmPasswordResetResponse{Message: "Password reset successfully"}, nil
+}
+
+func (s *UserManagementService) RequestEmailVerification(ctx context.Context, in *pb.RequestEmailVerificationRequest) (*pb.RequestEmailVerificationResponse, error) {
+	// check if the email is sent
+	if in.Email == "" {
+		return nil, status.Error(codes.InvalidArgument, "email is required")
+	}
+
+	// get the user from the database
+	var user models.User
+	err := sq.Select("users.id", "users_email.is_verified").
+		From("users").
+		InnerJoin("users_email ON users.id = users_email.user_id").
+		InnerJoin("users_password ON users.id = users_password.user_id").
+		Where(sq.Eq{"email": in.Email}).
+		RunWith(s.UserManagementServiceDB.DB).
+		QueryRow().
+		Scan(&user.ID, &user.Verified)
+		// if the user does not exist return an error
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, "failed to query the database")
+	}
+
+	// check if the user is already Verified
+	if user.Verified {
+		return nil, status.Error(codes.InvalidArgument, "user is already verified")
+	}
+
+	// create the email verification Token
+	code, err := utils.GenerateEmailVerificationCode()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate email verification code")
+	}
+
+	// save the request into the database
+	_, err = sq.Insert("email_verification").
+		Columns("user_id", "code").
+		Values(user.ID, code).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to save the email verification request")
+	}
+
+	// send the email verification token to the user
+	_, err = (*s.EmailServiceClient).SendVerifyEmailEmail(context.Background(), &pbEmail.SendEmailRequest{To: in.Email, Token: code})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to send email verification token")
+	}
+
+	return &pb.RequestEmailVerificationResponse{Message: "Email verification code sent successfully"}, nil
+}
+
+// VerifyEmail verifies a user by Email
+func (s *UserManagementService) VerifyEmail(ctx context.Context, in *pb.VerifyEmailRequest) (*pb.VerifyEmailResponse, error) {
+	// check if the code is sent
+	if in.Token == "" {
+		return nil, status.Error(codes.InvalidArgument, "code is required")
+	}
+
+	// get the email verification code from the database
+	var emailVerification models.EmailVerification
+	err := sq.Select("user_id", "code", "created_at").
+		From("email_verification").
+		Where(sq.Eq{"code": in.Token}).
+		RunWith(s.UserManagementServiceDB.DB).
+		QueryRow().
+		Scan(&emailVerification.UserID, &emailVerification.Code, &emailVerification.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "code not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// check if the code is expired
+	if utils.IsExpired(emailVerification.CreatedAt) {
+		return nil, status.Error(codes.InvalidArgument, "code is expired")
+	}
+
+	// update the email verification status in the database
+	_, err = sq.Update("users_email").
+		Where(sq.Eq{"user_id": emailVerification.UserID}).
+		Set("is_verified", true).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// delete the email verification code
+	_, err = sq.Delete("email_verification").
+		Where(sq.Eq{"code": emailVerification.Code}).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &pb.VerifyEmailResponse{Message: "Email verified successfully"}, nil
 }
