@@ -1,6 +1,10 @@
 package utils
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+
 	"github.com/matoous/go-nanoid/v2"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,6 +24,14 @@ func GeneratePasswordResetCode() (string, error) {
 }
 
 func HashPasswordResetCode(code string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(code), bcrypt.DefaultCost)
-	return string(bytes), err
+	hash := sha256.New()
+	_, err := hash.Write([]byte(code))
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func IsExpired(createdAt time.Time) bool {
+	return time.Since(createdAt) > time.Hour*24
 }

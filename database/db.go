@@ -22,7 +22,7 @@ func NewUserManagementServiceDB() (*UserManagementServiceDB, error) {
 
 	db, err := sql.Open(
 		"mysql",
-		fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, pass, host, port, name),
+		fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", user, pass, host, port, name),
 	)
 	if err != nil {
 		return nil, err

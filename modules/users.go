@@ -202,6 +202,7 @@ func (s *UserManagementService) RequestPasswordReset(ctx context.Context, in *pb
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to hash password reset code")
 	}
+	println(hashedCode)
 
 	// insert the password reset code in the database
 	_, err = sq.Insert("passwords_reset").
@@ -220,4 +221,69 @@ func (s *UserManagementService) RequestPasswordReset(ctx context.Context, in *pb
 	}
 
 	return &pb.RequestPasswordResetResponse{Message: "Password reset code sent successfully"}, nil
+}
+
+func (s *UserManagementService) ConfirmPasswordReset(ctx context.Context, in *pb.ConfirmPasswordResetRequest) (*pb.ConfirmPasswordResetResponse, error) {
+	// check if the code is sent
+	if in.Code == "" {
+		return nil, status.Error(codes.InvalidArgument, "code is required")
+	}
+
+	// hash the code
+	hashedCode, err := utils.HashPasswordResetCode(in.Code)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to hash password reset code")
+	}
+
+	// check if the code exists
+	var passwordReset models.PasswordReset
+	err = sq.Select("user_id", "code", "created_at").
+		From("passwords_reset").
+		Where(sq.Eq{"code": hashedCode}).
+		RunWith(s.UserManagementServiceDB.DB).
+		QueryRow().
+		Scan(&passwordReset.UserID, &passwordReset.Code, &passwordReset.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "code not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// check if the code is expired
+	if utils.IsExpired(passwordReset.CreatedAt) {
+		return nil, status.Error(codes.InvalidArgument, "code is expired")
+	}
+
+	// check if the passwords are the same
+	if in.Password != in.PasswordConfirmation {
+		return nil, status.Error(codes.InvalidArgument, "passwords do not match")
+	}
+
+	// hash the password
+	hashedPassword, err := utils.HashPassword(in.Password)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to hash the password")
+	}
+
+	// update the password in the database
+	_, err = sq.Update("users_password").
+		Where(sq.Eq{"user_id": passwordReset.UserID}).
+		Set("password", hashedPassword).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// delete the password reset code
+	_, err = sq.Delete("passwords_reset").
+		Where(sq.Eq{"code": hashedCode}).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &pb.ConfirmPasswordResetResponse{Message: "Password reset successfully"}, nil
 }
