@@ -171,3 +171,53 @@ func (s *UserManagementService) ListUsers(empty *emptypb.Empty, stream pb.UserMa
 
 	return nil
 }
+
+func (s *UserManagementService) RequestPasswordReset(ctx context.Context, in *pb.RequestPasswordResetRequest) (*pb.RequestPasswordResetResponse, error) {
+	// check if the email exists
+	var id uint64
+	err := sq.Select("users.id").
+		From("users").
+		InnerJoin("users_email ON users.id = users_email.user_id").
+		InnerJoin("users_password ON users.id = users_password.user_id").
+		Where(sq.Eq{"email": in.Email}).
+		RunWith(s.UserManagementServiceDB.DB).
+		QueryRow().
+		Scan(&id)
+		// if the user does not exist return an error
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// create the password reset Token
+	code, err := utils.GeneratePasswordResetCode()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate password reset code")
+	}
+
+	// hash the password reset codes
+	hashedCode, err := utils.HashPasswordResetCode(code)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to hash password reset code")
+	}
+
+	// insert the password reset code in the database
+	_, err = sq.Insert("passwords_reset").
+		Columns("user_id", "code").
+		Values(id, hashedCode).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// send the password reset code to the user
+	_, err = (*s.EmailServiceClient).SendPasswordResetEmail(context.Background(), &pbEmail.SendEmailRequest{To: in.Email, Token: code})
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &pb.RequestPasswordResetResponse{Message: "Password reset code sent successfully"}, nil
+}
