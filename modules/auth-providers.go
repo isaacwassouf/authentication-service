@@ -70,7 +70,7 @@ func (s *UserManagementService) GetAuthProviderCredentials(ctx context.Context, 
 	case pb.AuthProviderName_GOOGLE:
 		authProviderName = consts.GOOGLE
 	case pb.AuthProviderName_GITHUB:
-		authProviderName = consts.GitHub
+		authProviderName = consts.GITHUB
 	default:
 		return nil, status.Error(codes.InvalidArgument, "Invalid auth provider")
 	}
@@ -319,7 +319,7 @@ func (s *UserManagementService) GetGitHubAuthorizationUrl(
 		return nil, status.Error(codes.Internal, "Failed to parse the base url")
 	}
 
-	clientID, err := utils.GetAuthProviderClientID(consts.GitHub, s.UserManagementServiceDB.DB)
+	clientID, err := utils.GetAuthProviderClientID(consts.GITHUB, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -341,7 +341,7 @@ func (s *UserManagementService) GetGitHubAuthorizationUrl(
 
 func (s *UserManagementService) HandleGitHubLogin(ctx context.Context, in *pb.GitHubLoginRequest) (*pb.GitHubLoginResponse, error) {
 	// check if GitHub is enabled
-	active, err := utils.CheckAuthProviderIsActive(consts.GitHub, s.UserManagementServiceDB.DB)
+	active, err := utils.CheckAuthProviderIsActive(consts.GITHUB, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to check if GitHub is enabled")
 	}
@@ -350,7 +350,7 @@ func (s *UserManagementService) HandleGitHubLogin(ctx context.Context, in *pb.Gi
 	}
 
 	// get the external auth user by email
-	user, err := utils.GetExternalAuthUserByEmail(consts.GitHub, in.Email, s.UserManagementServiceDB.DB)
+	user, err := utils.GetExternalAuthUserByEmail(consts.GITHUB, in.Email, s.UserManagementServiceDB.DB)
 	if err != nil {
 		// the user does not exist, create a new user
 		if errors.Is(err, sql.ErrNoRows) {
@@ -359,7 +359,7 @@ func (s *UserManagementService) HandleGitHubLogin(ctx context.Context, in *pb.Gi
 				return nil, err
 			}
 			// get the user from the database from its id
-			user, err = utils.GetExternalAuthUserByID(consts.GitHub, id, s.UserManagementServiceDB.DB)
+			user, err = utils.GetExternalAuthUserByID(consts.GITHUB, id, s.UserManagementServiceDB.DB)
 			if err != nil {
 				return nil, status.Error(codes.Internal, "Failed to get the user")
 			}
