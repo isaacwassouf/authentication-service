@@ -1,8 +1,11 @@
 package utils
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"os"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/joho/godotenv"
@@ -128,4 +131,21 @@ func GetAuthProviderClientID(provider string, db *sql.DB) (sql.NullString, error
 
 func GenerateEmailVerificationCode() (string, error) {
 	return gonanoid.New()
+}
+
+func GenerateMFACode() (string, error) {
+	return gonanoid.New()
+}
+
+func HashMFACode(code string) (string, error) {
+	hash := sha256.New()
+	_, err := hash.Write([]byte(code))
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func MFAExpired(createdAt time.Time) bool {
+	return time.Since(createdAt) > time.Minute*5
 }

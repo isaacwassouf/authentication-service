@@ -84,13 +84,49 @@ func (s *UserManagementService) LoginUser(
 		return nil, status.Error(codes.InvalidArgument, "incorrect password")
 	}
 
-	// generate a JWT token
-	token, err := utils.GenerateToken(user)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to generate token")
+	MFAStatus := false
+
+	// if the MFA is not enabled then send the MFA token to the user
+	if MFAStatus {
+		// generate a JWT token
+		token, err := utils.GenerateToken(user)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to generate token")
+		}
+
+		return &pb.LoginResponse{Message: "Logged in successfully", Token: token}, nil
 	}
 
-	return &pb.LoginResponse{Message: "Logged in successfully", Token: token}, nil
+	// if the MFA is enabled then send the MFA token to the user
+	// generate a MFA token
+	MFACode, err := utils.GenerateMFACode()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate MFA token")
+	}
+
+	// hash the code
+	hashedMFACode, err := utils.HashMFACode(MFACode)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to hash MFA token")
+	}
+
+	// save the MFA token in the database
+	_, err = sq.Insert("mfa_verification").
+		Columns("user_id", "code").
+		Values(user.ID, hashedMFACode).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to save the MFA token")
+	}
+
+	// send the MFA token to the user
+	_, err = (*s.EmailServiceClient).SendMFAEmail(context.Background(), &pbEmail.SendEmailRequest{To: user.Email, Token: MFACode})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to send MFA token")
+	}
+
+	return &pb.LoginResponse{Message: "MFA token sent successfully"}, nil
 }
 
 func (s *UserManagementService) ListUsers(empty *emptypb.Empty, stream pb.UserManager_ListUsersServer) error {
@@ -364,4 +400,71 @@ func (s *UserManagementService) VerifyEmail(ctx context.Context, in *pb.VerifyEm
 	}
 
 	return &pb.VerifyEmailResponse{Message: "Email verified successfully"}, nil
+}
+
+func (s *UserManagementService) ConfirmMFA(ctx context.Context, in *pb.ConfirmMFARequest) (*pb.ConfirmMFAResponse, error) {
+	// check if the code is sent
+	if in.Code == "" {
+		return nil, status.Error(codes.InvalidArgument, "code is required")
+	}
+
+	// hash the code
+	hashedCode, err := utils.HashMFACode(in.Code)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to hash MFA code")
+	}
+
+	// get the MFA code from the database
+	var mfaVerification models.MFAVerifiction
+	err = sq.Select("user_id", "code", "created_at").
+		From("mfa_verification").
+		Where(sq.Eq{"code": hashedCode}).
+		RunWith(s.UserManagementServiceDB.DB).
+		QueryRow().
+		Scan(&mfaVerification.UserID, &mfaVerification.Code, &mfaVerification.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "code not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// check if the code is expired
+	if utils.MFAExpired(mfaVerification.CreatedAt) {
+		return nil, status.Error(codes.InvalidArgument, "code is expired")
+	}
+
+	// delete the MFA code
+	_, err = sq.Delete("mfa_verification").
+		Where(sq.Eq{"code": mfaVerification.Code}).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// get the user from the database
+	var user models.User
+	err = sq.Select("users.id", "users.name", "users_email.email", "users_email.is_verified").
+		From("users").
+		InnerJoin("users_email ON users.id = users_email.user_id").
+		Where(sq.Eq{"users.id": mfaVerification.UserID}).
+		RunWith(s.UserManagementServiceDB.DB).
+		QueryRow().
+		Scan(&user.ID, &user.Name, &user.Email, &user.Verified)
+		// if the user does not exist return an error
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, "failed to query the database")
+	}
+
+	// generate a JWT token
+	token, err := utils.GenerateToken(user)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to generate token")
+	}
+
+	return &pb.ConfirmMFAResponse{Token: token}, nil
 }
