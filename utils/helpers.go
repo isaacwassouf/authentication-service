@@ -149,3 +149,21 @@ func HashMFACode(code string) (string, error) {
 func MFAExpired(createdAt time.Time) bool {
 	return time.Since(createdAt) > time.Minute*5
 }
+
+func GetMFAStatus(db *sql.DB) (bool, error) {
+	var mfaStatus string
+	err := sq.Select("value").
+		From("settings").
+		Where(sq.Eq{"name": "mfa"}).
+		RunWith(db).
+		QueryRow().
+		Scan(&mfaStatus)
+	if err != nil {
+		return false, err
+	}
+	return mfaStatus == "enabled", nil
+}
+
+func GenerateEmailVerificationCode() (string, error) {
+	return gonanoid.New()
+}

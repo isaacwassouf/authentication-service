@@ -15,11 +15,13 @@ type UserPayload struct {
 	Email    string `json:"email"`
 	Verified bool   `json:"verified"`
 	Provider string `json:"provider"`
+	IsAdmin  bool   `json:"is_admin"`
 }
 
 type AdminPayload struct {
-	ID    int    `json:"id"`
-	Email string `json:"email"`
+	ID      int    `json:"id"`
+	Email   string `json:"email"`
+	IsAdmin bool   `json:"is_admin"`
 }
 
 // AuthCustomClaims Claims struct
@@ -34,7 +36,7 @@ type VerifyEmailCustomClaims struct {
 }
 
 type AdminCustomClaims struct {
-	Admin AdminPayload `json:"admin"`
+	User AdminPayload `json:"user"`
 	jwt.RegisteredClaims
 }
 
@@ -47,6 +49,7 @@ func GenerateToken(user models.User) (string, error) {
 		Name:     user.Name,
 		Email:    user.Email,
 		Verified: user.Verified,
+		IsAdmin:  false,
 	}
 	if user.Provider != "" {
 		userPayload.Provider = user.Provider
@@ -69,9 +72,10 @@ func GenerateAdminToken(admin models.Admin) (string, error) {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	// Create the claims for the JWT token
 	claims := AdminCustomClaims{
-		Admin: AdminPayload{
-			ID:    admin.ID,
-			Email: admin.Email,
+		User: AdminPayload{
+			ID:      admin.ID,
+			Email:   admin.Email,
+			IsAdmin: true,
 		},
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

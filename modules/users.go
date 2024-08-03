@@ -35,22 +35,9 @@ func (s *UserManagementService) RegisterUser(
 	}
 
 	// insert the user in the users table and the users_email and users_password table in a transaction
-	id, err := actions.CreateStandardUser(in, hashedPassword, s.UserManagementServiceDB.DB)
+	_, err = actions.CreateStandardUser(in, hashedPassword, s.UserManagementServiceDB.DB)
 	if err != nil {
 		return nil, err
-	}
-	// create the email verification Token
-	token, err := utils.GenerateEmailVerificationToken(models.User{ID: id})
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to generate email verification token")
-	}
-	// send the email verification token to the user
-	_, err = (*s.EmailServiceClient).SendVerifyEmailEmail(context.Background(), &pbEmail.SendEmailRequest{
-		To:    in.Email,
-		Token: token,
-	})
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to send email verification token")
 	}
 
 	return &pb.RegisterResponse{Message: "successfully registered user"}, nil
@@ -84,10 +71,13 @@ func (s *UserManagementService) LoginUser(
 		return nil, status.Error(codes.InvalidArgument, "incorrect password")
 	}
 
-	MFAStatus := false
+	MFAStatus, err := utils.GetMFAStatus(s.UserManagementServiceDB.DB)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to get MFA status")
+	}
 
 	// if the MFA is not enabled then send the MFA token to the user
-	if MFAStatus {
+	if !MFAStatus {
 		// generate a JWT token
 		token, err := utils.GenerateToken(user)
 		if err != nil {
