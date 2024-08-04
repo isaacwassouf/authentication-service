@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/pressly/goose"
 	"google.golang.org/grpc"
 
 	"github.com/isaacwassouf/authentication-service/database"
@@ -36,6 +37,18 @@ func main() {
 		log.Fatalf("failed to ping the database: %v", err)
 	}
 
+	// // preapre the db connection for the migrations
+	databaseURL := database.GetDatabaseURL()
+	gooseDB, err := goose.OpenDBWithDriver("mysql", databaseURL)
+	if err != nil {
+		log.Fatalf("failed to open the database connection for the migrations: %v", err)
+	}
+
+	// run the migrations
+	if err := goose.Up(gooseDB, "migrations"); err != nil {
+		log.Fatalf("failed to run the migrations: %v", err)
+	}
+	//
 	// Create a listener on TCP port 50051
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {

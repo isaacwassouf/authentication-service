@@ -29,3 +29,13 @@ func NewUserManagementServiceDB() (*UserManagementServiceDB, error) {
 	}
 	return &UserManagementServiceDB{DB: db}, nil
 }
+
+func GetDatabaseURL() string {
+	user := os.Getenv("MYSQL_USER")
+	pass := os.Getenv("MYSQL_PASSWORD")
+	host := os.Getenv("MYSQL_HOST")
+	port := os.Getenv("MYSQL_PORT")
+	name := os.Getenv("MYSQL_DATABASE")
+
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&multiStatements=True", user, pass, host, port, name)
+}
