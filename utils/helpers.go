@@ -163,7 +163,3 @@ func GetMFAStatus(db *sql.DB) (bool, error) {
 	}
 	return mfaStatus == "enabled", nil
 }
-
-func GenerateEmailVerificationCode() (string, error) {
-	return gonanoid.New()
-}

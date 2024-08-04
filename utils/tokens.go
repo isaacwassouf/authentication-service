@@ -30,11 +30,6 @@ type AuthCustomClaims struct {
 	jwt.RegisteredClaims
 }
 
-type VerifyEmailCustomClaims struct {
-	ID int `json:"id"`
-	jwt.RegisteredClaims
-}
-
 type AdminCustomClaims struct {
 	User AdminPayload `json:"user"`
 	jwt.RegisteredClaims
@@ -82,22 +77,9 @@ func GenerateAdminToken(admin models.Admin) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
 		},
 	}
-	// Create the token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(jwtSecret))
-}
 
-func GenerateEmailVerificationToken(user models.User) (string, error) {
-	// Get the JWT secret key from the environment
-	jwtSecret := os.Getenv("JWT_SECRET")
-	// Create the claims for the JWT token
-	claims := VerifyEmailCustomClaims{
-		ID: user.ID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
-		},
-	}
+	print(claims.User.IsAdmin)
+
 	// Create the token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(jwtSecret))

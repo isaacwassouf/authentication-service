@@ -110,7 +110,7 @@ func CreateGitHubUser(in *pb.GitHubLoginRequest, db *sql.DB) (int, error) {
 	var authProviderID int
 	err = sq.Select("id").
 		From("auth_providers").
-		Where(sq.Eq{"name": consts.GitHub}).
+		Where(sq.Eq{"name": consts.GITHUB}).
 		RunWith(tx).
 		QueryRow().
 		Scan(&authProviderID)
