@@ -140,20 +140,23 @@ func (s *UserManagementService) EnableAuthProvider(
 	ctx context.Context,
 	in *pb.EnableAuthProviderRequest,
 ) (*pb.EnableAuthProviderResponse, error) {
-	// check if the provider exists
-	var count int
-	err := sq.Select("COUNT(*)").
-		From("auth_providers").
-		Where(sq.Eq{"id": in.AuthProviderId}).
+	var clientid, clientsecret sql.NullString
+	err := sq.Select("client_id", "client_secret").
+		From("auth_providers_details").
+		Where(sq.Eq{"auth_provider_id": in.AuthProviderId}).
 		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
-		Scan(&count)
+		Scan(&clientid, &clientsecret)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "Failed query the database")
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "Auth provider not found")
+		}
+		return nil, status.Error(codes.Internal, "Failed to query the database")
 	}
 
-	if count == 0 {
-		return nil, status.Error(codes.NotFound, "Auth provider not found")
+	// check if the client_id and client_secret are set
+	if !clientid.Valid || !clientsecret.Valid {
+		return nil, status.Error(codes.InvalidArgument, "Client ID or Client Secret is not set")
 	}
 
 	// set the active field to true in the auth_providers_details table
@@ -250,12 +253,9 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 	params.Add("state", state)
 
 	// get the redirect_uri from the environment variables
-	redirectURI := os.Getenv("API_GATEWAY_GOOGLE_AUTHORIZATION_URL")
-	// if the redirect_uri is not set, use the default value
-	if redirectURI == "" {
-		redirectURI = "http://localhost:5173/api/auth/google/callback"
-	}
-	params.Add("redirect_uri", redirectURI)
+	googleRedirectURL := os.Getenv("GOOGLE_REDIRECT_URI")
+
+	params.Add("redirect_uri", googleRedirectURL)
 
 	baseURL.RawQuery = params.Encode()
 
@@ -332,7 +332,10 @@ func (s *UserManagementService) GetGitHubAuthorizationUrl(
 	params.Add("client_id", clientID.String)
 	params.Add("scope", "read:user user:email")
 	params.Add("state", "random_state")
-	params.Add("redirect_uri", "http://localhost:4000/api/auth/github/callback")
+
+	githubRedirectURL := os.Getenv("GITHUB_REDIRECT_URI")
+
+	params.Add("redirect_uri", githubRedirectURL)
 
 	baseURL.RawQuery = params.Encode()
 
