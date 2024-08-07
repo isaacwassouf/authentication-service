@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -27,6 +26,7 @@ func (s *UserManagementService) ListAuthProviders(ctx context.Context, in *empty
 		"auth_providers.id",
 		"auth_providers.name",
 		"auth_providers_details.client_id",
+		"auth_providers_details.redirect_url",
 		"auth_providers_details.active",
 	).
 		From("auth_providers").
@@ -42,17 +42,19 @@ func (s *UserManagementService) ListAuthProviders(ctx context.Context, in *empty
 		var id uint64
 		var name string
 		var clientId sql.NullString
+		var redirectUrl sql.NullString
 		var active bool
-		err := rows.Scan(&id, &name, &clientId, &active)
+		err := rows.Scan(&id, &name, &clientId, &redirectUrl, &active)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		authProvider := pb.AuthProvider{
-			Id:       id,
-			Name:     name,
-			ClientId: clientId.String,
-			Active:   active,
+			Id:          id,
+			Name:        name,
+			ClientId:    clientId.String,
+			RedirectUri: redirectUrl.String,
+			Active:      active,
 		}
 
 		authProviders = append(authProviders, &authProvider)
@@ -87,16 +89,20 @@ func (s *UserManagementService) GetAuthProviderCredentials(ctx context.Context, 
 	// get the client_id and client_secret for the auth provider
 	var clientId sql.NullString
 	var clientSecret sql.NullString
+	var redirectUrl sql.NullString
 
-	err = sq.Select("client_id", "client_secret").
+	err = sq.Select("client_id", "client_secret", "redirect_url").
 		From("auth_providers_details").
 		Join("auth_providers ON auth_providers.id = auth_providers_details.auth_provider_id").
-		Where(sq.Eq{"auth_providers.name": authProviderName}).RunWith(s.UserManagementServiceDB.DB).Scan(&clientId, &clientSecret)
+		Where(sq.Eq{"auth_providers.name": authProviderName}).RunWith(s.UserManagementServiceDB.DB).Scan(&clientId, &clientSecret, &redirectUrl)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "Auth provider not found")
+		}
 		return nil, status.Error(codes.Internal, "Failed to get the credentials")
 	}
 
-	return &pb.GetAuthProviderCredentialsResponse{ClientId: clientId.String, ClientSecret: clientSecret.String}, nil
+	return &pb.GetAuthProviderCredentialsResponse{ClientId: clientId.String, ClientSecret: clientSecret.String, RedirectUri: redirectUrl.String}, nil
 }
 
 // SetAuthProviderCredentials sets the client_id and client_secret for an external auth provider
@@ -125,6 +131,7 @@ func (s *UserManagementService) SetAuthProviderCredentials(
 		Where(sq.Eq{"auth_provider_id": in.AuthProviderId}).
 		Set("client_id", in.ClientId).
 		Set("client_secret", in.ClientSecret).
+		Set("redirect_url", in.RedirectUri).
 		Set("updated_at", time.Now()).
 		RunWith(s.UserManagementServiceDB.DB).
 		Exec()
@@ -140,13 +147,13 @@ func (s *UserManagementService) EnableAuthProvider(
 	ctx context.Context,
 	in *pb.EnableAuthProviderRequest,
 ) (*pb.EnableAuthProviderResponse, error) {
-	var clientid, clientsecret sql.NullString
-	err := sq.Select("client_id", "client_secret").
+	var clientid, clientsecret, redirectURL sql.NullString
+	err := sq.Select("client_id", "client_secret", "redirect_url").
 		From("auth_providers_details").
 		Where(sq.Eq{"auth_provider_id": in.AuthProviderId}).
 		RunWith(s.UserManagementServiceDB.DB).
 		QueryRow().
-		Scan(&clientid, &clientsecret)
+		Scan(&clientid, &clientsecret, &redirectURL)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "Auth provider not found")
@@ -155,8 +162,8 @@ func (s *UserManagementService) EnableAuthProvider(
 	}
 
 	// check if the client_id and client_secret are set
-	if !clientid.Valid || !clientsecret.Valid {
-		return nil, status.Error(codes.InvalidArgument, "Client ID or Client Secret is not set")
+	if !clientid.Valid || !clientsecret.Valid || !redirectURL.Valid {
+		return nil, status.Error(codes.InvalidArgument, "Client ID, Client Secret, or redirectURL are not set")
 	}
 
 	// set the active field to true in the auth_providers_details table
@@ -219,15 +226,15 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 		return nil, status.Error(codes.Internal, "Failed to parse the base url")
 	}
 
-	var clientId string
+	var clientId, redirectURL sql.NullString
 	var active bool
 	// get the client_id and active fields from the auth_providers_details table
-	query := sq.Select("auth_providers_details.client_id", "auth_providers_details.active").
+	query := sq.Select("auth_providers_details.client_id", "auth_providers_details.redirect_url", "auth_providers_details.active").
 		From("auth_providers").
 		Join("auth_providers_details ON auth_providers.id = auth_providers_details.auth_provider_id").
 		Where(sq.Eq{"auth_providers.name": consts.GOOGLE})
 
-	err = query.RunWith(s.UserManagementServiceDB.DB).QueryRow().Scan(&clientId, &active)
+	err = query.RunWith(s.UserManagementServiceDB.DB).QueryRow().Scan(&clientId, &redirectURL, &active)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "Auth provider not found")
@@ -235,27 +242,28 @@ func (s *UserManagementService) GetGoogleAuthorizationUrl(
 		return nil, status.Error(codes.Internal, "Failed to query the database")
 	}
 
+	// check if the client_id and the redirect_url are set
+	if !clientId.Valid || !redirectURL.Valid {
+		return nil, status.Error(codes.InvalidArgument, "Client ID or redirect URL are not set")
+	}
+
 	// check if the auth provider is active
 	if !active {
 		return nil, status.Error(codes.PermissionDenied, "Auth provider is not active")
 	}
-
-	params := url.Values{}
-	params.Add("client_id", clientId)
-	params.Add("response_type", "code")
-	params.Add("scope", "openid email profile")
 
 	// generate a random state
 	state, err := gonanoid.New()
 	if err != nil {
 		return nil, status.Error(codes.Internal, "Failed to generate a random state")
 	}
+
+	params := url.Values{}
+	params.Add("client_id", clientId.String)
+	params.Add("response_type", "code")
+	params.Add("scope", "openid email profile")
 	params.Add("state", state)
-
-	// get the redirect_uri from the environment variables
-	googleRedirectURL := os.Getenv("GOOGLE_REDIRECT_URI")
-
-	params.Add("redirect_uri", googleRedirectURL)
+	params.Add("redirect_uri", redirectURL.String)
 
 	baseURL.RawQuery = params.Encode()
 
@@ -319,23 +327,34 @@ func (s *UserManagementService) GetGitHubAuthorizationUrl(
 		return nil, status.Error(codes.Internal, "Failed to parse the base url")
 	}
 
-	clientID, err := utils.GetAuthProviderClientID(consts.GITHUB, s.UserManagementServiceDB.DB)
+	var clientID, redirectURL sql.NullString
+	var active bool
+	query := sq.Select("auth_providers_details.client_id", "auth_providers_details.redirect_url", "auth_providers_details.active").
+		From("auth_providers").
+		Join("auth_providers_details ON auth_providers.id = auth_providers_details.auth_provider_id").
+		Where(sq.Eq{"auth_providers.name": consts.GITHUB})
+
+	err = query.RunWith(s.UserManagementServiceDB.DB).QueryRow().Scan(&clientID, &redirectURL, &active)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "Auth provider not found")
+		}
+		return nil, status.Error(codes.Internal, "Failed to query the database")
 	}
 
-	if !clientID.Valid {
-		return nil, status.Error(codes.Internal, "Client ID is not set")
+	if !clientID.Valid || !redirectURL.Valid {
+		return nil, status.Error(codes.Internal, "Client ID or Redirect URL are not set")
+	}
+
+	if !active {
+		return nil, status.Error(codes.PermissionDenied, "Auth provider is not active")
 	}
 
 	params := url.Values{}
 	params.Add("client_id", clientID.String)
 	params.Add("scope", "read:user user:email")
 	params.Add("state", "random_state")
-
-	githubRedirectURL := os.Getenv("GITHUB_REDIRECT_URI")
-
-	params.Add("redirect_uri", githubRedirectURL)
+	params.Add("redirect_uri", redirectURL.String)
 
 	baseURL.RawQuery = params.Encode()
 
