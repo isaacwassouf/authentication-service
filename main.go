@@ -20,6 +20,11 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 
+	cryptographyServiceClient, err := utils.NewCryptographyServiceClient()
+	if err != nil {
+		log.Fatalf("failed to start the cryptography service client: %v", err)
+	}
+
 	// start the email service client
 	emailServiceClient, err := utils.NewEmailServiceClient()
 	if err != nil {
@@ -60,8 +65,9 @@ func main() {
 	pb.RegisterUserManagerServer(
 		s,
 		&modules.UserManagementService{
-			UserManagementServiceDB: db,
-			EmailServiceClient:      &emailServiceClient,
+			UserManagementServiceDB:   db,
+			EmailServiceClient:        &emailServiceClient,
+			CryptographyServiceClient: &cryptographyServiceClient,
 		},
 	)
 	log.Printf("Server listening at %v", lis.Addr())

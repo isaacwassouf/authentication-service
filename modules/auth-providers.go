@@ -16,6 +16,7 @@ import (
 
 	"github.com/isaacwassouf/authentication-service/actions"
 	"github.com/isaacwassouf/authentication-service/consts"
+	pbcryptography "github.com/isaacwassouf/authentication-service/protobufs/cryptography_service"
 	pb "github.com/isaacwassouf/authentication-service/protobufs/users_management_service"
 	"github.com/isaacwassouf/authentication-service/utils"
 )
@@ -102,7 +103,18 @@ func (s *UserManagementService) GetAuthProviderCredentials(ctx context.Context, 
 		return nil, status.Error(codes.Internal, "Failed to get the credentials")
 	}
 
-	return &pb.GetAuthProviderCredentialsResponse{ClientId: clientId.String, ClientSecret: clientSecret.String, RedirectUri: redirectUrl.String}, nil
+	// check if the client_id and client_secret are set
+	if !clientId.Valid || !clientSecret.Valid || !redirectUrl.Valid {
+		return nil, status.Error(codes.InvalidArgument, "Client ID, Client Secret, or redirectURL are not set")
+	}
+
+	// decrypt the client_secret
+	decryptedClientSecret, err := (*s.CryptographyServiceClient).Decrypt(ctx, &pbcryptography.DecryptRequest{Ciphertext: clientSecret.String})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to decrypt the client secret")
+	}
+
+	return &pb.GetAuthProviderCredentialsResponse{ClientId: clientId.String, ClientSecret: decryptedClientSecret.Plaintext, RedirectUri: redirectUrl.String}, nil
 }
 
 // SetAuthProviderCredentials sets the client_id and client_secret for an external auth provider
@@ -126,11 +138,17 @@ func (s *UserManagementService) SetAuthProviderCredentials(
 		return nil, status.Error(codes.NotFound, "Auth provider not found")
 	}
 
+	// encrypt the client_secret
+	encryptedClientSecret, err := (*s.CryptographyServiceClient).Encrypt(ctx, &pbcryptography.EncryptRequest{Plaintext: in.ClientSecret})
+	if err != nil {
+		return nil, status.Error(codes.Internal, "Failed to encrypt the client secret")
+	}
+
 	// set the credentials i.e., client_id and client_secret
 	_, err = sq.Update("auth_providers_details").
 		Where(sq.Eq{"auth_provider_id": in.AuthProviderId}).
 		Set("client_id", in.ClientId).
-		Set("client_secret", in.ClientSecret).
+		Set("client_secret", encryptedClientSecret.Ciphertext).
 		Set("redirect_url", in.RedirectUri).
 		Set("updated_at", time.Now()).
 		RunWith(s.UserManagementServiceDB.DB).

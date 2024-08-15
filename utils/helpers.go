@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/isaacwassouf/authentication-service/models"
+	pbcryptography "github.com/isaacwassouf/authentication-service/protobufs/cryptography_service"
 	pbEmail "github.com/isaacwassouf/authentication-service/protobufs/email_management_service"
 )
 
@@ -62,6 +63,32 @@ func NewEmailServiceClient() (pbEmail.EmailManagerClient, error) {
 		return nil, err
 	}
 	return pbEmail.NewEmailManagerClient(conn), nil
+}
+
+// get the gRPC email service client
+func NewCryptographyServiceClient() (pbcryptography.CryptographyManagerClient, error) {
+	// get host and port from the environment
+	host, found := os.LookupEnv("CRYPTOGRAPHY_SERVICE_HOST")
+	if !found {
+		host = "localhost"
+	}
+
+	port, found := os.LookupEnv("CRYPTOGRAPHY_SERVICE_PORT")
+	if !found {
+		port = "8094"
+	}
+
+	connectionURI := host + ":" + port
+
+	// Create a connection to the email service
+	conn, err := grpc.Dial(
+		connectionURI,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return pbcryptography.NewCryptographyManagerClient(conn), nil
 }
 
 // CheckAuthProviderIsActive checks if an auth provider is active
