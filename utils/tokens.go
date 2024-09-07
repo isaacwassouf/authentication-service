@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/matoous/go-nanoid/v2"
 
 	"github.com/isaacwassouf/authentication-service/models"
 )
@@ -37,6 +38,12 @@ type AdminCustomClaims struct {
 
 // GenerateToken Function to generate a JWT token
 func GenerateToken(user models.User) (string, error) {
+	// generate a random id
+	id, err := gonanoid.New()
+	if err != nil {
+		return "", err
+	}
+
 	// Get the JWT secret key from the environment
 	jwtSecret := os.Getenv("JWT_SECRET")
 	userPayload := UserPayload{
@@ -55,6 +62,7 @@ func GenerateToken(user models.User) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
+			ID:        id,
 		},
 	}
 	// Create the token
@@ -77,8 +85,6 @@ func GenerateAdminToken(admin models.Admin) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
 		},
 	}
-
-	print(claims.User.IsAdmin)
 
 	// Create the token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

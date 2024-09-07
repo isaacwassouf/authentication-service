@@ -119,6 +119,38 @@ func (s *UserManagementService) LoginUser(
 	return &pb.LoginResponse{Message: "MFA token sent successfully"}, nil
 }
 
+func (s *UserManagementService) LogoutUser(ctx context.Context, in *pb.LogoutRequest) (*emptypb.Empty, error) {
+	_, err := sq.Insert("tokens_blacklist").
+		Columns("user_id", "jti").
+		Values(in.UserId, in.Jti).
+		RunWith(s.UserManagementServiceDB.DB).
+		Exec()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *UserManagementService) VerifyTokenRevoation(ctx context.Context, in *pb.VerifyTokenRevoationRequest) (*pb.VerifyTokenRevoationResponse, error) {
+	var count int
+	err := sq.Select("count(*)").
+		From("tokens_blacklist").
+		Where(sq.Eq{"user_id": in.UserId, "jti": in.Jti}).
+		RunWith(s.UserManagementServiceDB.DB).
+		QueryRow().
+		Scan(&count)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if count == 0 {
+		return &pb.VerifyTokenRevoationResponse{IsRevoked: false}, nil
+	}
+
+	return &pb.VerifyTokenRevoationResponse{IsRevoked: true}, nil
+}
+
 func (s *UserManagementService) ListUsers(empty *emptypb.Empty, stream pb.UserManager_ListUsersServer) error {
 	rows, err := sq.Select(
 		"users.id",
